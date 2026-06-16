@@ -1,6 +1,5 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { getAdjustedCash } from "../services/excelService.ts";
 
 const rootDir = process.cwd();
 const outputDir = path.join(rootDir, "dist-pages");
@@ -16,14 +15,9 @@ async function main(): Promise<void> {
     await fs.copyFile(path.join(rootDir, file), path.join(outputDir, file));
   }
 
-  const adjustedCash = await getAdjustedCash();
+  await fs.cp(path.join(rootDir, "data"), dataDir, { recursive: true });
 
-  await fs.writeFile(
-    path.join(dataDir, "adjusted-cash.json"),
-    `${JSON.stringify({ adjustedCash: Number(adjustedCash.toFixed(2)) }, null, 2)}\n`,
-  );
-
-  console.log(`Exported GitHub Pages site with adjusted cash ${adjustedCash}`);
+  console.log("Exported GitHub Pages site from data/financial-data.json");
 }
 
 main().catch((error) => {
