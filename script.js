@@ -10,8 +10,8 @@ const setupBadge = document.querySelector(".setup-badge");
 const groceryModal = document.querySelector("#groceryModal");
 const groceryForm = document.querySelector("#groceryForm");
 
-const USERNAME = "ViraOne";
-const PASSWORD = "123456";
+const VALID_USERNAME = "viraone";
+const VALID_PASSWORD = "123456";
 
 const STORAGE_KEYS = {
   isLoggedIn: "isLoggedIn",
@@ -873,7 +873,7 @@ function handleLoginSubmit(form) {
   const username = usernameInput.value.trim();
   const password = passwordInput.value;
 
-  if (username !== USERNAME || password !== PASSWORD) {
+  if (username !== VALID_USERNAME || password !== VALID_PASSWORD) {
     showFormError(form, "Username or password does not match.");
     passwordInput.focus();
     return;
