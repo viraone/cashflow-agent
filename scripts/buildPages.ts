@@ -4,11 +4,13 @@ import { getAdjustedCash } from "../services/excelService.ts";
 
 const rootDir = process.cwd();
 const outputDir = path.join(rootDir, "dist-pages");
+const dataDir = path.join(outputDir, "data");
 const staticFiles = ["index.html", "styles.css", "script.js"];
 
 async function main(): Promise<void> {
   await fs.rm(outputDir, { recursive: true, force: true });
   await fs.mkdir(outputDir, { recursive: true });
+  await fs.mkdir(dataDir, { recursive: true });
 
   for (const file of staticFiles) {
     await fs.copyFile(path.join(rootDir, file), path.join(outputDir, file));
@@ -17,7 +19,7 @@ async function main(): Promise<void> {
   const adjustedCash = await getAdjustedCash();
 
   await fs.writeFile(
-    path.join(outputDir, "adjusted-cash.json"),
+    path.join(dataDir, "adjusted-cash.json"),
     `${JSON.stringify({ adjustedCash: Number(adjustedCash.toFixed(2)) }, null, 2)}\n`,
   );
 
