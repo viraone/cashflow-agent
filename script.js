@@ -217,6 +217,17 @@ const requireAvailableCash = () => {
 const formatAmountInput = (value) =>
   value == null ? "" : formatCurrency(value).replace("$", "");
 
+async function loadAdjustedCash() {
+  const res = await fetch("./data/adjusted-cash.json");
+
+  if (!res.ok) {
+    throw new Error("Unable to load Adjusted Cash snapshot");
+  }
+
+  const data = await res.json();
+  return data.adjustedCash;
+}
+
 async function getAdjustedCashFromLedger() {
   let data = null;
 
@@ -232,21 +243,21 @@ async function getAdjustedCashFromLedger() {
   }
 
   if (!data) {
-    const localValue = Number(localStorage.getItem("gravy-adjusted-cash"));
-
-    if (Number.isFinite(localValue)) {
+    try {
       ledgerMode = "pages";
-      return localValue;
-    }
+      data = {
+        adjustedCash: await loadAdjustedCash(),
+      };
+    } catch (error) {
+      const localValue = Number(localStorage.getItem("gravy-adjusted-cash"));
 
-    const response = await fetch("adjusted-cash.json");
+      if (Number.isFinite(localValue)) {
+        ledgerMode = "pages";
+        return localValue;
+      }
 
-    if (!response.ok) {
       throw new Error("Unable to load Adjusted Cash from Excel");
     }
-
-    ledgerMode = "pages";
-    data = await response.json();
   }
 
   const adjustedCash = Number(data.adjustedCash);
