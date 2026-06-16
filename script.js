@@ -14,7 +14,7 @@ if (appShell && sidebarToggle) {
   });
 }
 
-const availableCash = 4971.43;
+let availableCash = null;
 let editingObligationId = null;
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
@@ -205,8 +205,54 @@ const iconSvgs = {
 
 const formatCurrency = (value) => currencyFormatter.format(value);
 
+const requireAvailableCash = () => {
+  if (typeof availableCash !== "number") {
+    throw new Error("Adjusted cash has not loaded from Excel yet");
+  }
+
+  return availableCash;
+};
+
 const formatAmountInput = (value) =>
   value == null ? "" : formatCurrency(value).replace("$", "");
+
+async function getAdjustedCashFromLedger() {
+  const response = await fetch("/api/adjusted-cash");
+
+  if (!response.ok) {
+    throw new Error("Unable to load Adjusted Cash from Excel");
+  }
+
+  const data = await response.json();
+  const adjustedCash = Number(data.adjustedCash);
+
+  if (!Number.isFinite(adjustedCash)) {
+    throw new Error("Adjusted Cash from Excel is not a valid number");
+  }
+
+  return adjustedCash;
+}
+
+async function saveAdjustedCashToLedger(newAdjustedCash) {
+  const response = await fetch("/api/adjusted-cash", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      adjustedCash: Number(newAdjustedCash.toFixed(2)),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Unable to save Adjusted Cash to Excel");
+  }
+}
+
+async function syncAdjustedCashToLedger() {
+  const { adjustedCash } = calculateCashPosition();
+  await saveAdjustedCashToLedger(adjustedCash);
+}
 
 const parseAmount = (value) => {
   const normalized = value.replace(/[$,\s]/g, "");
@@ -296,6 +342,7 @@ const calculateBillTotals = () => {
 };
 
 const calculateGrocerySpending = () => {
+  const currentCash = requireAvailableCash();
   const today = getTodayString();
   const todaysSpending = groceryTransactions.reduce(
     (total, transaction) =>
@@ -312,7 +359,7 @@ const calculateGrocerySpending = () => {
   return {
     todaysSpending,
     monthToDateSpending,
-    adjustedCash: availableCash - monthToDateSpending - totalPaidBills,
+    adjustedCash: currentCash - monthToDateSpending - totalPaidBills,
   };
 };
 
@@ -320,11 +367,12 @@ const getObligationById = (id) =>
   obligations.find((obligation) => obligation.id === id);
 
 const calculateCashPosition = () => {
+  const currentCash = requireAvailableCash();
   const billTotals = calculateBillTotals();
   const { monthToDateSpending, adjustedCash } = calculateGrocerySpending();
 
   return {
-    availableCash,
+    availableCash: currentCash,
     trackedObligations: obligations.length,
     groceriesSpent: monthToDateSpending,
     adjustedCash,
@@ -709,7 +757,7 @@ function closeGroceryModal() {
   document.body.classList.remove("modal-open");
 }
 
-function handleGrocerySubmit(form) {
+async function handleGrocerySubmit(form) {
   const merchantInput = form.elements.namedItem("merchant");
   const amountInput = form.elements.namedItem("amount");
   const dateInput = form.elements.namedItem("date");
@@ -744,6 +792,7 @@ function handleGrocerySubmit(form) {
 
   closeGroceryModal();
   renderDashboard();
+  await syncAdjustedCashToLedger();
 }
 
 function focusEditingAmount(id) {
@@ -752,7 +801,7 @@ function focusEditingAmount(id) {
     ?.focus();
 }
 
-function markObligationPaid(id) {
+async function markObligationPaid(id) {
   const obligation = getObligationById(id);
 
   if (!obligation) {
@@ -769,9 +818,10 @@ function markObligationPaid(id) {
   obligation.isPaid = true;
   obligation.paidDate = getTodayString();
   renderDashboard();
+  await syncAdjustedCashToLedger();
 }
 
-function undoObligationPayment(id) {
+async function undoObligationPayment(id) {
   const obligation = getObligationById(id);
 
   if (!obligation) {
@@ -781,6 +831,7 @@ function undoObligationPayment(id) {
   obligation.isPaid = false;
   obligation.paidDate = null;
   renderDashboard();
+  await syncAdjustedCashToLedger();
 }
 
 function handleEditSubmit(form) {
@@ -830,7 +881,9 @@ groceryModal?.addEventListener("click", (event) => {
 
 groceryForm?.addEventListener("submit", (event) => {
   event.preventDefault();
-  handleGrocerySubmit(event.target);
+  handleGrocerySubmit(event.target).catch((error) => {
+    showFormError(event.target, error.message);
+  });
 });
 
 obligationsList?.addEventListener("click", (event) => {
@@ -849,11 +902,15 @@ obligationsList?.addEventListener("click", (event) => {
   }
 
   if (action === "mark-paid") {
-    markObligationPaid(actionTarget.dataset.id);
+    markObligationPaid(actionTarget.dataset.id).catch((error) => {
+      console.error(error);
+    });
   }
 
   if (action === "undo-payment") {
-    undoObligationPayment(actionTarget.dataset.id);
+    undoObligationPayment(actionTarget.dataset.id).catch((error) => {
+      console.error(error);
+    });
   }
 
   if (action === "cancel") {
@@ -908,4 +965,40 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-renderDashboard();
+function renderLedgerState(title, message) {
+  if (cashPositionCard) {
+    cashPositionCard.innerHTML = `
+      <article class="cash-position-card ledger-state-card">
+        <div class="cash-card-top">
+          <h3>${escapeHtml(title)}</h3>
+          <span class="ai-chip">Excel ledger</span>
+        </div>
+        <p>${escapeHtml(message)}</p>
+      </article>
+    `;
+  }
+
+  if (dailySpendingCard) {
+    dailySpendingCard.innerHTML = "";
+  }
+
+  if (obligationsList) {
+    obligationsList.innerHTML = "";
+  }
+}
+
+async function initDashboard() {
+  renderLedgerState("Loading cash ledger", "Reading Adjusted cash.xlsx...");
+
+  try {
+    availableCash = await getAdjustedCashFromLedger();
+    renderDashboard();
+  } catch (error) {
+    renderLedgerState(
+      "Excel ledger unavailable",
+      error instanceof Error ? error.message : "Unable to load Adjusted Cash.",
+    );
+  }
+}
+
+initDashboard();
