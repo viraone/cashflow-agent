@@ -7,7 +7,57 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="app-shell" id="appShell">
+    <section class="login-screen" id="loginScreen" aria-labelledby="loginTitle">
+      <div class="login-panel">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div>
+            <p class="brand-name">Gravy</p>
+            <p class="brand-kicker">Financial agents</p>
+          </div>
+        </div>
+
+        <div class="login-copy">
+          <p class="section-kicker">PRIVATE CASH FLOW</p>
+          <h1 id="loginTitle">Sign in to your dashboard</h1>
+          <p>Your cash position, grocery activity, and paid bills stay on this browser.</p>
+        </div>
+
+        <form class="login-form" id="loginForm" novalidate>
+          <label class="field-group">
+            <span>Username</span>
+            <input
+              type="text"
+              name="username"
+              autocomplete="username"
+              placeholder="ViraOne"
+              required
+            />
+          </label>
+
+          <label class="field-group">
+            <span>Password</span>
+            <input
+              type="password"
+              name="password"
+              autocomplete="current-password"
+              placeholder="123456"
+              required
+            />
+          </label>
+
+          <p class="form-error" id="loginError" role="alert"></p>
+
+          <button class="primary-button login-button" type="submit">Sign in</button>
+        </form>
+      </div>
+    </section>
+
+    <div class="app-shell" id="appShell" hidden>
       <aside class="sidebar" aria-label="Primary navigation">
         <div class="brand-lockup">
           <div class="brand-mark" aria-hidden="true">
@@ -98,18 +148,21 @@
               Working
             </span>
           </div>
-          <button
-            class="sidebar-toggle"
-            id="sidebarToggle"
-            type="button"
-            aria-label="Toggle sidebar"
-            aria-pressed="false"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="4" y="5" width="16" height="14" rx="3" />
-              <path d="M10 5v14" />
-            </svg>
-          </button>
+          <div class="topbar-actions">
+            <button class="logout-button" id="logoutButton" type="button">Logout</button>
+            <button
+              class="sidebar-toggle"
+              id="sidebarToggle"
+              type="button"
+              aria-label="Toggle sidebar"
+              aria-pressed="false"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="4" y="5" width="16" height="14" rx="3" />
+                <path d="M10 5v14" />
+              </svg>
+            </button>
+          </div>
         </header>
 
         <section class="monthly-payments" id="monthly-payments" aria-label="Monthly payments">
