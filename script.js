@@ -16,6 +16,7 @@ if (appShell && sidebarToggle) {
 
 let availableCash = null;
 let editingObligationId = null;
+let ledgerMode = "excel";
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -217,13 +218,37 @@ const formatAmountInput = (value) =>
   value == null ? "" : formatCurrency(value).replace("$", "");
 
 async function getAdjustedCashFromLedger() {
-  const response = await fetch("/api/adjusted-cash");
+  let data = null;
 
-  if (!response.ok) {
-    throw new Error("Unable to load Adjusted Cash from Excel");
+  try {
+    const response = await fetch("/api/adjusted-cash");
+
+    if (response.ok) {
+      ledgerMode = "excel";
+      data = await response.json();
+    }
+  } catch (error) {
+    data = null;
   }
 
-  const data = await response.json();
+  if (!data) {
+    const localValue = Number(localStorage.getItem("gravy-adjusted-cash"));
+
+    if (Number.isFinite(localValue)) {
+      ledgerMode = "pages";
+      return localValue;
+    }
+
+    const response = await fetch("adjusted-cash.json");
+
+    if (!response.ok) {
+      throw new Error("Unable to load Adjusted Cash from Excel");
+    }
+
+    ledgerMode = "pages";
+    data = await response.json();
+  }
+
   const adjustedCash = Number(data.adjustedCash);
 
   if (!Number.isFinite(adjustedCash)) {
@@ -234,13 +259,20 @@ async function getAdjustedCashFromLedger() {
 }
 
 async function saveAdjustedCashToLedger(newAdjustedCash) {
+  const nextAdjustedCash = Number(newAdjustedCash.toFixed(2));
+
+  if (ledgerMode === "pages") {
+    localStorage.setItem("gravy-adjusted-cash", String(nextAdjustedCash));
+    return;
+  }
+
   const response = await fetch("/api/adjusted-cash", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      adjustedCash: Number(newAdjustedCash.toFixed(2)),
+      adjustedCash: nextAdjustedCash,
     }),
   });
 
@@ -400,7 +432,7 @@ function CashPositionCard({
     <article class="cash-position-card" aria-label="Cash Position">
       <div class="cash-card-top">
         <h3>Cash Position</h3>
-        <span class="ai-chip">AI snapshot</span>
+        <span class="ai-chip">${ledgerMode === "excel" ? "Excel ledger" : "Pages snapshot"}</span>
       </div>
 
       <dl class="cash-summary">

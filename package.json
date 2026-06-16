@@ -5,7 +5,8 @@
   "main": "server.ts",
   "scripts": {
     "dev": "tsx server.ts",
-    "check": "node --check script.js"
+    "check": "node --check script.js",
+    "export:pages": "tsx scripts/buildPages.ts"
   },
   "repository": {
     "type": "git",
