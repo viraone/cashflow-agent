@@ -1,3 +1,6 @@
+const loginScreen = document.querySelector("#loginScreen");
+const loginForm = document.querySelector("#loginForm");
+const logoutButton = document.querySelector("#logoutButton");
 const appShell = document.querySelector("#appShell");
 const sidebarToggle = document.querySelector("#sidebarToggle");
 const cashPositionCard = document.querySelector("#cashPositionCard");
@@ -6,6 +9,16 @@ const obligationsList = document.querySelector("#obligationsList");
 const setupBadge = document.querySelector(".setup-badge");
 const groceryModal = document.querySelector("#groceryModal");
 const groceryForm = document.querySelector("#groceryForm");
+
+const USERNAME = "ViraOne";
+const PASSWORD = "123456";
+
+const STORAGE_KEYS = {
+  isLoggedIn: "isLoggedIn",
+  adjustedCash: "adjustedCash",
+  groceries: "groceries",
+  obligations: "obligations",
+};
 
 if (appShell && sidebarToggle) {
   sidebarToggle.addEventListener("click", () => {
@@ -17,7 +30,8 @@ if (appShell && sidebarToggle) {
 let availableCash = null;
 let obligations = [];
 let editingObligationId = null;
-const ledgerMode = "JSON ledger";
+let dashboardInitialized = false;
+const ledgerMode = "Browser ledger";
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -66,7 +80,7 @@ const dueDateFormatter = new Intl.DateTimeFormat("en-US", {
  */
 
 /** @type {GroceryTransaction[]} */
-const groceryTransactions = [];
+let groceryTransactions = [];
 
 const iconSvgs = {
   home: `
@@ -194,13 +208,55 @@ async function getFinancialDataFromLedger() {
   };
 }
 
-async function saveAdjustedCashToLedger(_newAdjustedCash) {
-  return;
+function saveAdjustedCash(value) {
+  if (!Number.isFinite(value)) {
+    return;
+  }
+
+  localStorage.setItem(STORAGE_KEYS.adjustedCash, String(value));
+}
+
+function loadAdjustedCash(defaultValue) {
+  const saved = localStorage.getItem(STORAGE_KEYS.adjustedCash);
+
+  if (saved === null) {
+    return defaultValue;
+  }
+
+  const savedValue = Number(saved);
+  return Number.isFinite(savedValue) ? savedValue : defaultValue;
+}
+
+function readJsonStorage(key) {
+  const saved = localStorage.getItem(key);
+
+  if (saved === null) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(saved);
+  } catch (_error) {
+    return null;
+  }
+}
+
+function saveGroceries() {
+  localStorage.setItem(STORAGE_KEYS.groceries, JSON.stringify(groceryTransactions));
+}
+
+function saveObligations() {
+  localStorage.setItem(STORAGE_KEYS.obligations, JSON.stringify(obligations));
+}
+
+function persistDashboardState() {
+  saveGroceries();
+  saveObligations();
+  saveAdjustedCash(calculateCashPosition().adjustedCash);
 }
 
 async function syncAdjustedCashToLedger() {
-  const { adjustedCash } = calculateCashPosition();
-  await saveAdjustedCashToLedger(adjustedCash);
+  persistDashboardState();
 }
 
 const parseAmount = (value) => {
@@ -259,6 +315,100 @@ const isCurrentMonth = (dateValue) => {
   );
 };
 
+function normalizeGroceries(nextGroceries) {
+  if (!Array.isArray(nextGroceries)) {
+    return [];
+  }
+
+  return nextGroceries
+    .map((transaction) => ({
+      id:
+        transaction.id ??
+        `grocery-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`,
+      merchant: String(transaction.merchant ?? "").trim(),
+      amount: Number(transaction.amount),
+      date: transaction.date,
+    }))
+    .filter(
+      (transaction) =>
+        transaction.merchant &&
+        Number.isFinite(transaction.amount) &&
+        transaction.amount > 0 &&
+        !Number.isNaN(new Date(`${transaction.date}T00:00:00`).getTime()),
+    );
+}
+
+function mergeObligations(defaultObligations, savedObligations) {
+  if (!Array.isArray(savedObligations)) {
+    return defaultObligations;
+  }
+
+  let normalizedSavedObligations;
+
+  try {
+    normalizedSavedObligations = normalizeObligations(savedObligations);
+  } catch (_error) {
+    return defaultObligations;
+  }
+
+  const savedById = new Map(
+    normalizedSavedObligations.map((obligation) => [obligation.id, obligation]),
+  );
+  const defaultIds = new Set(defaultObligations.map((obligation) => obligation.id));
+  const mergedDefaults = defaultObligations.map((defaultObligation) => {
+    const savedObligation = savedById.get(defaultObligation.id);
+
+    if (!savedObligation) {
+      return defaultObligation;
+    }
+
+    return {
+      ...defaultObligation,
+      name: savedObligation.name || defaultObligation.name,
+      category: savedObligation.category || defaultObligation.category,
+      amount: savedObligation.amount,
+      dueDate: savedObligation.dueDate,
+      cadence: savedObligation.cadence ?? defaultObligation.cadence,
+      isPaid: savedObligation.isPaid,
+      paidDate: savedObligation.paidDate ?? null,
+      amountLabel: savedObligation.amountLabel ?? defaultObligation.amountLabel,
+      icon: savedObligation.icon ?? defaultObligation.icon,
+    };
+  });
+  const savedExtras = normalizedSavedObligations.filter(
+    (obligation) => !defaultIds.has(obligation.id),
+  );
+
+  return [...mergedDefaults, ...savedExtras];
+}
+
+function loadGroceries() {
+  return normalizeGroceries(readJsonStorage(STORAGE_KEYS.groceries));
+}
+
+function loadObligations(defaultObligations) {
+  return mergeObligations(
+    defaultObligations,
+    readJsonStorage(STORAGE_KEYS.obligations),
+  );
+}
+
+const calculateTotalPaidBills = (nextObligations = obligations) =>
+  nextObligations.reduce(
+    (sum, obligation) =>
+      obligation.isPaid ? sum + (obligation.amount ?? 0) : sum,
+    0,
+  );
+
+const calculateMonthToDateGrocerySpending = (
+  nextGroceries = groceryTransactions,
+) =>
+  nextGroceries.reduce(
+    (total, transaction) =>
+      isCurrentMonth(transaction.date) ? total + transaction.amount : total,
+    0,
+  );
+
 const calculateBillTotals = () => {
   const paidObligations = obligations.filter(
     (obligation) => obligation.isPaid && obligation.amount != null,
@@ -298,11 +448,7 @@ const calculateGrocerySpending = () => {
       transaction.date === today ? total + transaction.amount : total,
     0,
   );
-  const monthToDateSpending = groceryTransactions.reduce(
-    (total, transaction) =>
-      isCurrentMonth(transaction.date) ? total + transaction.amount : total,
-    0,
-  );
+  const monthToDateSpending = calculateMonthToDateGrocerySpending();
   const { totalPaidBills } = calculateBillTotals();
 
   return {
@@ -682,6 +828,64 @@ function showFormError(form, message) {
   }
 }
 
+function isLoggedIn() {
+  return localStorage.getItem(STORAGE_KEYS.isLoggedIn) === "true";
+}
+
+function showLoginScreen() {
+  if (loginScreen) {
+    loginScreen.hidden = false;
+  }
+
+  if (appShell) {
+    appShell.hidden = true;
+  }
+
+  loginForm?.reset();
+
+  if (loginForm) {
+    showFormError(loginForm, "");
+    loginForm.elements.namedItem("username")?.focus();
+  }
+}
+
+async function showDashboardScreen() {
+  if (loginScreen) {
+    loginScreen.hidden = true;
+  }
+
+  if (appShell) {
+    appShell.hidden = false;
+  }
+
+  if (!dashboardInitialized) {
+    await initDashboard();
+    dashboardInitialized = true;
+    return;
+  }
+
+  renderDashboard();
+}
+
+function handleLoginSubmit(form) {
+  const usernameInput = form.elements.namedItem("username");
+  const passwordInput = form.elements.namedItem("password");
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value;
+
+  if (username !== USERNAME || password !== PASSWORD) {
+    showFormError(form, "Username or password does not match.");
+    passwordInput.focus();
+    return;
+  }
+
+  localStorage.setItem(STORAGE_KEYS.isLoggedIn, "true");
+  showFormError(form, "");
+  showDashboardScreen().catch((error) => {
+    console.error(error);
+  });
+}
+
 function openGroceryModal() {
   if (!groceryModal || !groceryForm) {
     return;
@@ -743,6 +947,16 @@ async function handleGrocerySubmit(form) {
   renderDashboard();
   await syncAdjustedCashToLedger();
 }
+
+loginForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  handleLoginSubmit(event.target);
+});
+
+logoutButton?.addEventListener("click", () => {
+  localStorage.removeItem(STORAGE_KEYS.isLoggedIn);
+  showLoginScreen();
+});
 
 function focusEditingAmount(id) {
   document
@@ -810,6 +1024,7 @@ function handleEditSubmit(form) {
 
   editingObligationId = null;
   renderDashboard();
+  persistDashboardState();
 }
 
 dailySpendingCard?.addEventListener("click", (event) => {
@@ -920,7 +1135,7 @@ function renderLedgerState(title, message) {
       <article class="cash-position-card ledger-state-card">
         <div class="cash-card-top">
           <h3>${escapeHtml(title)}</h3>
-          <span class="ai-chip">JSON ledger</span>
+          <span class="ai-chip">${ledgerMode}</span>
         </div>
         <p>${escapeHtml(message)}</p>
       </article>
@@ -941,9 +1156,17 @@ async function initDashboard() {
 
   try {
     const financialData = await getFinancialDataFromLedger();
-    availableCash = financialData.adjustedCash;
-    obligations = financialData.obligations;
+    obligations = loadObligations(financialData.obligations);
+    groceryTransactions = loadGroceries();
+
+    const storedAdjustedCash = loadAdjustedCash(financialData.adjustedCash);
+    availableCash =
+      storedAdjustedCash +
+      calculateMonthToDateGrocerySpending(groceryTransactions) +
+      calculateTotalPaidBills(obligations);
+
     renderDashboard();
+    persistDashboardState();
   } catch (error) {
     renderLedgerState(
       "Financial data unavailable",
@@ -952,4 +1175,10 @@ async function initDashboard() {
   }
 }
 
-initDashboard();
+if (isLoggedIn()) {
+  showDashboardScreen().catch((error) => {
+    console.error(error);
+  });
+} else {
+  showLoginScreen();
+}
