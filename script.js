@@ -15,8 +15,9 @@ if (appShell && sidebarToggle) {
 }
 
 let availableCash = null;
+let obligations = [];
 let editingObligationId = null;
-let ledgerMode = "excel";
+const ledgerMode = "JSON ledger";
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -36,7 +37,7 @@ const dueDateFormatter = new Intl.DateTimeFormat("en-US", {
  * @property {number | null} amount
  * @property {string | undefined} amountLabel
  * @property {string | null} dueDate
- * @property {"monthly"} cadence
+ * @property {"monthly" | undefined} cadence
  * @property {boolean} isPaid
  * @property {string | null | undefined} paidDate
  * @property {string | undefined} icon
@@ -63,99 +64,6 @@ const dueDateFormatter = new Intl.DateTimeFormat("en-US", {
  * @property {number} amount
  * @property {string} date
  */
-
-/** @type {Obligation[]} */
-const obligations = [
-  {
-    id: "pilot-apartments",
-    name: "Pilot Apartments",
-    category: "Housing",
-    amount: 1500,
-    dueDate: "2026-07-01",
-    cadence: "monthly",
-    isPaid: false,
-    paidDate: null,
-    icon: "home",
-  },
-  {
-    id: "becu-personal-loan",
-    name: "BECU personal loan",
-    category: "Loan",
-    amount: null,
-    dueDate: null,
-    cadence: "monthly",
-    isPaid: false,
-    paidDate: null,
-    icon: "loan",
-  },
-  {
-    id: "paypal-credit-card",
-    name: "PayPal Credit Card",
-    category: "Credit card",
-    amount: 1150.18,
-    amountLabel: "Balance owed",
-    dueDate: null,
-    cadence: "monthly",
-    isPaid: false,
-    paidDate: null,
-    icon: "card",
-  },
-  {
-    id: "xfinity-internet",
-    name: "Xfinity Internet",
-    category: "Internet",
-    amount: null,
-    dueDate: null,
-    cadence: "monthly",
-    isPaid: false,
-    paidDate: null,
-    icon: "internet",
-  },
-  {
-    id: "xfinity-mobile",
-    name: "Xfinity Mobile",
-    category: "Phone",
-    amount: null,
-    dueDate: null,
-    cadence: "monthly",
-    isPaid: false,
-    paidDate: null,
-    icon: "mobile",
-  },
-  {
-    id: "becu-credit-card",
-    name: "BECU credit card",
-    category: "Credit card",
-    amount: null,
-    dueDate: null,
-    cadence: "monthly",
-    isPaid: false,
-    paidDate: null,
-    icon: "card",
-  },
-  {
-    id: "seattle-city-lights",
-    name: "Seattle City Lights",
-    category: "Electric utility",
-    amount: null,
-    dueDate: null,
-    cadence: "monthly",
-    isPaid: false,
-    paidDate: null,
-    icon: "utility",
-  },
-  {
-    id: "progressive-insurance",
-    name: "Progressive insurance",
-    category: "Insurance",
-    amount: null,
-    dueDate: null,
-    cadence: "monthly",
-    isPaid: false,
-    paidDate: null,
-    icon: "insurance",
-  },
-];
 
 /** @type {GroceryTransaction[]} */
 const groceryTransactions = [];
@@ -204,11 +112,26 @@ const iconSvgs = {
   `,
 };
 
+const obligationIconMap = {
+  "pilot-apartments": "home",
+  "becu-personal-loan": "loan",
+  "paypal-credit-card": "card",
+  "xfinity-internet": "internet",
+  "xfinity-mobile": "mobile",
+  "becu-credit-card": "card",
+  "seattle-city-lights": "utility",
+  "progressive-insurance": "insurance",
+};
+
+const obligationAmountLabelMap = {
+  "paypal-credit-card": "Balance owed",
+};
+
 const formatCurrency = (value) => currencyFormatter.format(value);
 
 const requireAvailableCash = () => {
   if (typeof availableCash !== "number") {
-    throw new Error("Adjusted cash has not loaded from Excel yet");
+    throw new Error("Adjusted cash has not loaded from financial-data.json yet");
   }
 
   return availableCash;
@@ -217,79 +140,62 @@ const requireAvailableCash = () => {
 const formatAmountInput = (value) =>
   value == null ? "" : formatCurrency(value).replace("$", "");
 
-async function loadAdjustedCash() {
-  const res = await fetch("./data/adjusted-cash.json");
+async function loadFinancialData() {
+  const response = await fetch("./data/financial-data.json");
 
-  if (!res.ok) {
-    throw new Error("Unable to load Adjusted Cash snapshot");
+  if (!response.ok) {
+    throw new Error("Unable to load financial data");
   }
 
-  const data = await res.json();
-  return data.adjustedCash;
+  const financialData = await response.json();
+
+  return {
+    adjustedCash: Number(financialData.adjustedCash),
+    obligations: normalizeObligations(financialData.obligations),
+  };
 }
 
-async function getAdjustedCashFromLedger() {
-  let data = null;
-
-  try {
-    const response = await fetch("/api/adjusted-cash");
-
-    if (response.ok) {
-      ledgerMode = "excel";
-      data = await response.json();
-    }
-  } catch (error) {
-    data = null;
+function normalizeObligations(nextObligations) {
+  if (!Array.isArray(nextObligations)) {
+    throw new Error("financial-data.json must include an obligations array");
   }
 
-  if (!data) {
-    try {
-      ledgerMode = "pages";
-      data = {
-        adjustedCash: await loadAdjustedCash(),
-      };
-    } catch (error) {
-      const localValue = Number(localStorage.getItem("gravy-adjusted-cash"));
+  return nextObligations.map((obligation) => ({
+    id: obligation.id,
+    name: obligation.name,
+    category: obligation.category,
+    amount:
+      obligation.amount == null ? null : Number(obligation.amount),
+    dueDate: obligation.dueDate ?? null,
+    cadence: obligation.cadence ?? "monthly",
+    isPaid: Boolean(obligation.isPaid),
+    paidDate: obligation.paidDate ?? null,
+    amountLabel: obligation.amountLabel ?? obligationAmountLabelMap[obligation.id],
+    icon:
+      obligation.icon ??
+      obligationIconMap[obligation.id] ??
+      obligation.category?.toLowerCase().replace(/\s+/g, "-") ??
+      "card",
+  }));
+}
 
-      if (Number.isFinite(localValue)) {
-        ledgerMode = "pages";
-        return localValue;
-      }
-
-      throw new Error("Unable to load Adjusted Cash from Excel");
-    }
-  }
+async function getFinancialDataFromLedger() {
+  const data = await loadFinancialData();
 
   const adjustedCash = Number(data.adjustedCash);
 
   if (!Number.isFinite(adjustedCash)) {
-    throw new Error("Adjusted Cash from Excel is not a valid number");
+    throw new Error("Adjusted Cash is not a valid number");
   }
 
-  return adjustedCash;
+  return {
+    adjustedCash,
+    obligations: data.obligations,
+  };
 }
 
-async function saveAdjustedCashToLedger(newAdjustedCash) {
-  const nextAdjustedCash = Number(newAdjustedCash.toFixed(2));
-
-  if (ledgerMode === "pages") {
-    localStorage.setItem("gravy-adjusted-cash", String(nextAdjustedCash));
-    return;
-  }
-
-  const response = await fetch("/api/adjusted-cash", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      adjustedCash: nextAdjustedCash,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error("Unable to save Adjusted Cash to Excel");
-  }
+async function saveAdjustedCashToLedger(_newAdjustedCash) {
+  return;
 }
 
 async function syncAdjustedCashToLedger() {
@@ -443,7 +349,7 @@ function CashPositionCard({
     <article class="cash-position-card" aria-label="Cash Position">
       <div class="cash-card-top">
         <h3>Cash Position</h3>
-        <span class="ai-chip">${ledgerMode === "excel" ? "Excel ledger" : "Pages snapshot"}</span>
+        <span class="ai-chip">${ledgerMode}</span>
       </div>
 
       <dl class="cash-summary">
@@ -1014,7 +920,7 @@ function renderLedgerState(title, message) {
       <article class="cash-position-card ledger-state-card">
         <div class="cash-card-top">
           <h3>${escapeHtml(title)}</h3>
-          <span class="ai-chip">Excel ledger</span>
+          <span class="ai-chip">JSON ledger</span>
         </div>
         <p>${escapeHtml(message)}</p>
       </article>
@@ -1031,15 +937,17 @@ function renderLedgerState(title, message) {
 }
 
 async function initDashboard() {
-  renderLedgerState("Loading cash ledger", "Reading Adjusted cash.xlsx...");
+  renderLedgerState("Loading financial data", "Reading data/financial-data.json...");
 
   try {
-    availableCash = await getAdjustedCashFromLedger();
+    const financialData = await getFinancialDataFromLedger();
+    availableCash = financialData.adjustedCash;
+    obligations = financialData.obligations;
     renderDashboard();
   } catch (error) {
     renderLedgerState(
-      "Excel ledger unavailable",
-      error instanceof Error ? error.message : "Unable to load Adjusted Cash.",
+      "Financial data unavailable",
+      error instanceof Error ? error.message : "Unable to load financial data.",
     );
   }
 }

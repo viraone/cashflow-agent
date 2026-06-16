@@ -1,0 +1,69 @@
+{
+  "adjustedCash": 5971.43,
+  "obligations": [
+    {
+      "id": "pilot-apartments",
+      "name": "Pilot Apartments",
+      "category": "Housing",
+      "amount": 1500.0,
+      "dueDate": "2026-07-01",
+      "isPaid": false
+    },
+    {
+      "id": "paypal-credit-card",
+      "name": "PayPal Credit Card",
+      "category": "Credit Card",
+      "amount": 1150.18,
+      "dueDate": "2026-07-10",
+      "isPaid": false
+    },
+    {
+      "id": "xfinity-internet",
+      "name": "Xfinity Internet",
+      "category": "Internet",
+      "amount": 80.0,
+      "dueDate": "2026-07-15",
+      "isPaid": false
+    },
+    {
+      "id": "xfinity-mobile",
+      "name": "Xfinity Mobile",
+      "category": "Phone",
+      "amount": 45.0,
+      "dueDate": "2026-07-15",
+      "isPaid": false
+    },
+    {
+      "id": "becu-personal-loan",
+      "name": "BECU Personal Loan",
+      "category": "Loan",
+      "amount": 350.0,
+      "dueDate": "2026-07-20",
+      "isPaid": false
+    },
+    {
+      "id": "becu-credit-card",
+      "name": "BECU Credit Card",
+      "category": "Credit Card",
+      "amount": 200.0,
+      "dueDate": "2026-07-25",
+      "isPaid": false
+    },
+    {
+      "id": "seattle-city-lights",
+      "name": "Seattle City Light",
+      "category": "Electric Utility",
+      "amount": 90.0,
+      "dueDate": "2026-07-18",
+      "isPaid": false
+    },
+    {
+      "id": "progressive-insurance",
+      "name": "Progressive Insurance",
+      "category": "Insurance",
+      "amount": 110.0,
+      "dueDate": "2026-07-12",
+      "isPaid": false
+    }
+  ]
+}
