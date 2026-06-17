@@ -13,15 +13,8 @@ const groceryForm = document.querySelector("#groceryForm");
 const VALID_USERNAME = "viraone";
 const VALID_PASSWORD = "123456";
 
-const STORAGE_KEYS = {
-  isLoggedIn: "isLoggedIn",
-  adjustedCash: "adjustedCash",
-  groceries: "groceries",
-  obligations: "obligations",
-  dataVersion: "financialDataVersion",
-};
-
-const DATA_VERSION = "2026-06-16-aligned-cash-snapshot";
+const AUTH_SESSION_KEY = "isLoggedIn";
+const DEFAULT_PROFILE_ID = "00000000-0000-0000-0000-000000000001";
 
 if (appShell && sidebarToggle) {
   sidebarToggle.addEventListener("click", () => {
@@ -34,7 +27,8 @@ let startingCash = null;
 let obligations = [];
 let editingObligationId = null;
 let dashboardInitialized = false;
-const ledgerMode = "Pages snapshot";
+let supabaseClient = null;
+const ledgerMode = "Supabase sync";
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -148,7 +142,7 @@ const formatCurrency = (value) => currencyFormatter.format(value);
 
 const requireStartingCash = () => {
   if (typeof startingCash !== "number") {
-    throw new Error("Starting cash has not loaded from financial-data.json yet");
+    throw new Error("Starting cash has not loaded from Supabase yet");
   }
 
   return startingCash;
@@ -157,30 +151,91 @@ const requireStartingCash = () => {
 const formatAmountInput = (value) =>
   value == null ? "" : formatCurrency(value).replace("$", "");
 
-async function loadFinancialData() {
-  const response = await fetch("./data/financial-data.json");
+function getSupabaseConfig() {
+  const config = window.GRAVY_SUPABASE_CONFIG ?? {};
+  const url = config.url?.trim();
+  const anonKey = config.anonKey?.trim();
+  const profileId = config.profileId?.trim() || DEFAULT_PROFILE_ID;
 
-  if (!response.ok) {
-    throw new Error("Unable to load financial data");
+  if (
+    !url ||
+    !anonKey ||
+    url.includes("YOUR_SUPABASE_PROJECT_URL") ||
+    anonKey.includes("YOUR_SUPABASE_ANON_KEY")
+  ) {
+    throw new Error(
+      "Supabase is not configured. Add your project URL and anon key in supabase-config.js.",
+    );
   }
 
-  const financialData = await response.json();
-  const startingCash = Number(
-    financialData.startingCash ??
-      financialData.availableCash ??
-      financialData.adjustedCash,
-  );
+  return { url, anonKey, profileId };
+}
 
+function getSupabaseClient() {
+  if (supabaseClient) {
+    return supabaseClient;
+  }
+
+  if (!window.supabase?.createClient) {
+    throw new Error("Supabase JavaScript client did not load.");
+  }
+
+  const { url, anonKey } = getSupabaseConfig();
+  supabaseClient = window.supabase.createClient(url, anonKey);
+  return supabaseClient;
+}
+
+function throwIfSupabaseError(error, action) {
+  if (error) {
+    throw new Error(`${action}: ${error.message}`);
+  }
+}
+
+function fromSupabaseObligation(row) {
   return {
-    startingCash,
-    groceries: normalizeGroceries(financialData.groceries),
-    obligations: normalizeObligations(financialData.obligations),
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    amount: row.amount,
+    dueDate: row.due_date,
+    cadence: "monthly",
+    isPaid: row.is_paid,
+    paidDate: row.paid_date,
+    amountLabel: row.amount_label,
+  };
+}
+
+function toSupabaseObligationPatch(obligation) {
+  return {
+    amount: obligation.amount,
+    due_date: obligation.dueDate,
+    is_paid: obligation.isPaid,
+    paid_date: obligation.paidDate ?? null,
+    amount_label: obligation.amountLabel ?? null,
+  };
+}
+
+function fromSupabaseGrocery(row) {
+  return {
+    id: row.id,
+    merchant: row.merchant,
+    amount: row.amount,
+    date: row.date,
+  };
+}
+
+function toSupabaseGrocery(transaction) {
+  return {
+    id: transaction.id,
+    merchant: transaction.merchant,
+    amount: transaction.amount,
+    date: transaction.date,
   };
 }
 
 function normalizeObligations(nextObligations) {
   if (!Array.isArray(nextObligations)) {
-    throw new Error("financial-data.json must include an obligations array");
+    throw new Error("Supabase obligations query must return an array");
   }
 
   return nextObligations.map((obligation) => ({
@@ -202,80 +257,93 @@ function normalizeObligations(nextObligations) {
   }));
 }
 
-async function getFinancialDataFromLedger() {
-  const data = await loadFinancialData();
+async function loadDashboardDataFromSupabase() {
+  const client = getSupabaseClient();
+  const { profileId } = getSupabaseConfig();
 
-  const startingCash = Number(data.startingCash);
+  const [cashResult, obligationsResult, groceriesResult] = await Promise.all([
+    client
+      .from("cash_position")
+      .select("id, available_cash, updated_at")
+      .eq("id", profileId)
+      .limit(1),
+    client
+      .from("obligations")
+      .select("id, name, category, amount, due_date, is_paid, paid_date, amount_label")
+      .order("due_date", { ascending: true })
+      .order("name", { ascending: true }),
+    client
+      .from("grocery_transactions")
+      .select("id, merchant, amount, date")
+      .order("date", { ascending: false }),
+  ]);
 
-  if (!Number.isFinite(startingCash)) {
+  throwIfSupabaseError(cashResult.error, "Unable to load cash position");
+  throwIfSupabaseError(obligationsResult.error, "Unable to load obligations");
+  throwIfSupabaseError(groceriesResult.error, "Unable to load grocery transactions");
+
+  const cashRow = cashResult.data?.[0];
+
+  if (!cashRow) {
+    throw new Error(
+      "No cash_position row found for this profile. Run supabase/schema.sql first.",
+    );
+  }
+
+  const nextStartingCash = Number(cashRow.available_cash);
+
+  if (!Number.isFinite(nextStartingCash)) {
     throw new Error("Starting cash is not a valid number");
   }
 
   return {
-    startingCash,
-    groceries: data.groceries,
-    obligations: data.obligations,
+    startingCash: nextStartingCash,
+    groceries: normalizeGroceries(
+      (groceriesResult.data ?? []).map(fromSupabaseGrocery),
+    ),
+    obligations: normalizeObligations(
+      (obligationsResult.data ?? []).map(fromSupabaseObligation),
+    ),
   };
 }
 
-function saveAdjustedCash(value) {
-  if (!Number.isFinite(value)) {
-    return;
-  }
+async function saveCashPosition(nextStartingCash) {
+  const client = getSupabaseClient();
+  const { profileId } = getSupabaseConfig();
+  const { error } = await client
+    .from("cash_position")
+    .update({
+      available_cash: nextStartingCash,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", profileId);
 
-  localStorage.setItem(STORAGE_KEYS.adjustedCash, String(value));
+  throwIfSupabaseError(error, "Unable to save cash position");
 }
 
-function loadAdjustedCash(defaultValue) {
-  const saved = localStorage.getItem(STORAGE_KEYS.adjustedCash);
+async function createGroceryTransaction(transaction) {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from("grocery_transactions")
+    .insert(toSupabaseGrocery(transaction))
+    .select("id, merchant, amount, date")
+    .single();
 
-  if (saved === null) {
-    return defaultValue;
-  }
-
-  const savedValue = Number(saved);
-  return Number.isFinite(savedValue) ? savedValue : defaultValue;
+  throwIfSupabaseError(error, "Unable to save grocery purchase");
+  return normalizeGroceries([fromSupabaseGrocery(data)])[0];
 }
 
-function hasCurrentDataVersion() {
-  return localStorage.getItem(STORAGE_KEYS.dataVersion) === DATA_VERSION;
-}
+async function saveObligation(obligation) {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from("obligations")
+    .update(toSupabaseObligationPatch(obligation))
+    .eq("id", obligation.id)
+    .select("id, name, category, amount, due_date, is_paid, paid_date, amount_label")
+    .single();
 
-function saveDataVersion() {
-  localStorage.setItem(STORAGE_KEYS.dataVersion, DATA_VERSION);
-}
-
-function readJsonStorage(key) {
-  const saved = localStorage.getItem(key);
-
-  if (saved === null) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(saved);
-  } catch (_error) {
-    return null;
-  }
-}
-
-function saveGroceries() {
-  localStorage.setItem(STORAGE_KEYS.groceries, JSON.stringify(groceryTransactions));
-}
-
-function saveObligations() {
-  localStorage.setItem(STORAGE_KEYS.obligations, JSON.stringify(obligations));
-}
-
-function persistDashboardState() {
-  saveGroceries();
-  saveObligations();
-  saveAdjustedCash(calculateCashPosition().adjustedCash);
-  saveDataVersion();
-}
-
-async function syncAdjustedCashToLedger() {
-  persistDashboardState();
+  throwIfSupabaseError(error, "Unable to save obligation");
+  return normalizeObligations([fromSupabaseObligation(data)])[0];
 }
 
 const parseAmount = (value) => {
@@ -355,72 +423,6 @@ function normalizeGroceries(nextGroceries) {
         transaction.amount > 0 &&
         !Number.isNaN(new Date(`${transaction.date}T00:00:00`).getTime()),
     );
-}
-
-function mergeObligations(defaultObligations, savedObligations) {
-  if (!Array.isArray(savedObligations)) {
-    return defaultObligations;
-  }
-
-  let normalizedSavedObligations;
-
-  try {
-    normalizedSavedObligations = normalizeObligations(savedObligations);
-  } catch (_error) {
-    return defaultObligations;
-  }
-
-  const savedById = new Map(
-    normalizedSavedObligations.map((obligation) => [obligation.id, obligation]),
-  );
-  const defaultIds = new Set(defaultObligations.map((obligation) => obligation.id));
-  const mergedDefaults = defaultObligations.map((defaultObligation) => {
-    const savedObligation = savedById.get(defaultObligation.id);
-
-    if (!savedObligation) {
-      return defaultObligation;
-    }
-
-    return {
-      ...defaultObligation,
-      name: savedObligation.name || defaultObligation.name,
-      category: savedObligation.category || defaultObligation.category,
-      amount: savedObligation.amount,
-      dueDate: savedObligation.dueDate,
-      cadence: savedObligation.cadence ?? defaultObligation.cadence,
-      isPaid: savedObligation.isPaid,
-      paidDate: savedObligation.paidDate ?? null,
-      amountLabel: savedObligation.amountLabel ?? defaultObligation.amountLabel,
-      icon: savedObligation.icon ?? defaultObligation.icon,
-    };
-  });
-  const savedExtras = normalizedSavedObligations.filter(
-    (obligation) => !defaultIds.has(obligation.id),
-  );
-
-  return [...mergedDefaults, ...savedExtras];
-}
-
-function loadGroceries(defaultGroceries) {
-  if (!hasCurrentDataVersion()) {
-    return defaultGroceries;
-  }
-
-  const savedGroceries = readJsonStorage(STORAGE_KEYS.groceries);
-  return savedGroceries === null
-    ? defaultGroceries
-    : normalizeGroceries(savedGroceries);
-}
-
-function loadObligations(defaultObligations) {
-  if (!hasCurrentDataVersion()) {
-    return defaultObligations;
-  }
-
-  return mergeObligations(
-    defaultObligations,
-    readJsonStorage(STORAGE_KEYS.obligations),
-  );
 }
 
 const calculateTotalPaidBills = (nextObligations = obligations) =>
@@ -834,7 +836,7 @@ function showFormError(form, message) {
 }
 
 function isLoggedIn() {
-  return localStorage.getItem(STORAGE_KEYS.isLoggedIn) === "true";
+  return localStorage.getItem(AUTH_SESSION_KEY) === "true";
 }
 
 function showLoginScreen() {
@@ -884,7 +886,7 @@ function handleLoginSubmit(form) {
     return;
   }
 
-  localStorage.setItem(STORAGE_KEYS.isLoggedIn, "true");
+  localStorage.setItem(AUTH_SESSION_KEY, "true");
   showFormError(form, "");
   showDashboardScreen().catch((error) => {
     console.error(error);
@@ -941,16 +943,16 @@ async function handleGrocerySubmit(form) {
     return;
   }
 
-  groceryTransactions.push({
+  const savedTransaction = await createGroceryTransaction({
     id: `grocery-${Date.now()}`,
     merchant,
     amount,
     date,
   });
 
+  groceryTransactions.push(savedTransaction);
   closeGroceryModal();
   renderDashboard();
-  await syncAdjustedCashToLedger();
 }
 
 loginForm?.addEventListener("submit", (event) => {
@@ -959,7 +961,7 @@ loginForm?.addEventListener("submit", (event) => {
 });
 
 logoutButton?.addEventListener("click", () => {
-  localStorage.removeItem(STORAGE_KEYS.isLoggedIn);
+  localStorage.removeItem(AUTH_SESSION_KEY);
   showLoginScreen();
 });
 
@@ -983,10 +985,21 @@ async function markObligationPaid(id) {
     return;
   }
 
-  obligation.isPaid = true;
-  obligation.paidDate = getTodayString();
+  const previousObligation = { ...obligation };
+  Object.assign(obligation, {
+    isPaid: true,
+    paidDate: getTodayString(),
+  });
   renderDashboard();
-  await syncAdjustedCashToLedger();
+
+  try {
+    Object.assign(obligation, await saveObligation(obligation));
+    renderDashboard();
+  } catch (error) {
+    Object.assign(obligation, previousObligation);
+    renderDashboard();
+    throw error;
+  }
 }
 
 async function undoObligationPayment(id) {
@@ -996,13 +1009,24 @@ async function undoObligationPayment(id) {
     return;
   }
 
-  obligation.isPaid = false;
-  obligation.paidDate = null;
+  const previousObligation = { ...obligation };
+  Object.assign(obligation, {
+    isPaid: false,
+    paidDate: null,
+  });
   renderDashboard();
-  await syncAdjustedCashToLedger();
+
+  try {
+    Object.assign(obligation, await saveObligation(obligation));
+    renderDashboard();
+  } catch (error) {
+    Object.assign(obligation, previousObligation);
+    renderDashboard();
+    throw error;
+  }
 }
 
-function handleEditSubmit(form) {
+async function handleEditSubmit(form) {
   const obligation = getObligationById(form.dataset.id);
 
   if (!obligation) {
@@ -1019,17 +1043,25 @@ function handleEditSubmit(form) {
     return;
   }
 
-  obligation.amount = amount;
-  obligation.dueDate = dueDateInput.value || null;
+  const previousObligation = { ...obligation };
+  Object.assign(obligation, {
+    amount,
+    dueDate: dueDateInput.value || null,
+  });
 
   if (amount == null) {
     obligation.isPaid = false;
     obligation.paidDate = null;
   }
 
-  editingObligationId = null;
-  renderDashboard();
-  persistDashboardState();
+  try {
+    Object.assign(obligation, await saveObligation(obligation));
+    editingObligationId = null;
+    renderDashboard();
+  } catch (error) {
+    Object.assign(obligation, previousObligation);
+    showFormError(form, error.message);
+  }
 }
 
 dailySpendingCard?.addEventListener("click", (event) => {
@@ -1101,7 +1133,9 @@ obligationsList?.addEventListener("click", (event) => {
 
 obligationsList?.addEventListener("submit", (event) => {
   event.preventDefault();
-  handleEditSubmit(event.target);
+  handleEditSubmit(event.target).catch((error) => {
+    showFormError(event.target, error.message);
+  });
 });
 
 obligationsList?.addEventListener("focusout", (event) => {
@@ -1157,25 +1191,15 @@ function renderLedgerState(title, message) {
 }
 
 async function initDashboard() {
-  renderLedgerState("Loading financial data", "Reading data/financial-data.json...");
+  renderLedgerState("Loading financial data", "Syncing with Supabase...");
 
   try {
-    const financialData = await getFinancialDataFromLedger();
-    obligations = loadObligations(financialData.obligations);
-    groceryTransactions = loadGroceries(financialData.groceries);
-
-    if (hasCurrentDataVersion()) {
-      const storedAdjustedCash = loadAdjustedCash(financialData.startingCash);
-      startingCash =
-        storedAdjustedCash +
-        calculateMonthToDateGrocerySpending(groceryTransactions) +
-        calculateTotalPaidBills(obligations);
-    } else {
-      startingCash = financialData.startingCash;
-    }
+    const financialData = await loadDashboardDataFromSupabase();
+    obligations = financialData.obligations;
+    groceryTransactions = financialData.groceries;
+    startingCash = financialData.startingCash;
 
     renderDashboard();
-    persistDashboardState();
   } catch (error) {
     renderLedgerState(
       "Financial data unavailable",
