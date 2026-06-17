@@ -869,14 +869,17 @@ svg {
 }
 
 .bill-row.paid-bill {
-  border-color: #cfeedd;
-  background: #f6fff9;
+  border-color: #9ed8b4;
+  background: #effaf4;
 }
 
-.paid-bill .bill-icon,
-.paid-bill .bill-main,
-.paid-bill .bill-meta {
-  opacity: 0.76;
+.paid-bill .bill-icon {
+  color: #087443;
+  background: #dff6ea;
+}
+
+.paid-bill .bill-main h3 {
+  color: #087443;
 }
 
 .bill-row-editing {
@@ -945,6 +948,26 @@ svg {
   letter-spacing: 0;
 }
 
+.paid-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.paid-title-check {
+  width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  color: #ffffff;
+  background: #09884d;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 900;
+}
+
 .bill-main p {
   margin-top: 5px;
   color: var(--muted);
@@ -997,6 +1020,7 @@ svg {
 }
 
 .mark-paid-button,
+.paid-confirm-button,
 .undo-payment-button {
   min-height: 34px;
   padding: 8px 11px;
@@ -1019,6 +1043,17 @@ svg {
   background: #e3f8ec;
   border-color: #acdcbc;
   outline: none;
+}
+
+.paid-confirm-button {
+  border: 1px solid #087443;
+  color: #ffffff;
+  background: #09884d;
+  cursor: default;
+}
+
+.paid-confirm-button:disabled {
+  opacity: 1;
 }
 
 .undo-payment-button {

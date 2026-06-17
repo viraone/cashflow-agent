@@ -666,6 +666,11 @@ function ObligationCard(obligation) {
 
   const icon = obligation.icon ?? "card";
   const amountIsKnown = obligation.amount != null;
+  const title = obligation.isPaid
+    ? `<span class="paid-title"><span class="paid-title-check" aria-hidden="true">&#10003;</span>${escapeHtml(
+        obligation.name,
+      )}</span>`
+    : escapeHtml(obligation.name);
   const amountLabel = obligation.isPaid
     ? `&#10003; Paid ${formatTransactionDate(obligation.paidDate)}`
     : amountIsKnown
@@ -685,7 +690,7 @@ function ObligationCard(obligation) {
         ${iconSvgs[icon] ?? iconSvgs.card}
       </span>
       <div class="bill-main">
-        <h3>${escapeHtml(obligation.name)}</h3>
+        <h3>${title}</h3>
         <p>${escapeHtml(obligation.category)}</p>
       </div>
       <div class="bill-meta">
@@ -701,6 +706,14 @@ function ObligationCard(obligation) {
         ${
           obligation.isPaid
             ? `
+              <button
+                class="paid-confirm-button"
+                type="button"
+                disabled
+                aria-disabled="true"
+              >
+                &#10003; Paid
+              </button>
               <button
                 class="undo-payment-button"
                 type="button"
