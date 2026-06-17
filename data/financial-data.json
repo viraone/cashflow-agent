@@ -1,13 +1,6 @@
 {
   "availableCash": 5954.86,
-  "groceries": [
-    {
-      "id": "qfc-2026-06-16",
-      "merchant": "QFC",
-      "amount": 43.0,
-      "date": "2026-06-16"
-    }
-  ],
+  "groceries": [],
   "obligations": [
     {
       "id": "pilot-apartments",

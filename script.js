@@ -21,7 +21,7 @@ const STORAGE_KEYS = {
   dataVersion: "financialDataVersion",
 };
 
-const DATA_VERSION = "2026-06-16-pages-snapshot";
+const DATA_VERSION = "2026-06-16-aligned-cash-snapshot";
 
 if (appShell && sidebarToggle) {
   sidebarToggle.addEventListener("click", () => {
