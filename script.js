@@ -18,7 +18,10 @@ const STORAGE_KEYS = {
   adjustedCash: "adjustedCash",
   groceries: "groceries",
   obligations: "obligations",
+  dataVersion: "financialDataVersion",
 };
+
+const DATA_VERSION = "2026-06-16-pages-snapshot";
 
 if (appShell && sidebarToggle) {
   sidebarToggle.addEventListener("click", () => {
@@ -31,7 +34,7 @@ let availableCash = null;
 let obligations = [];
 let editingObligationId = null;
 let dashboardInitialized = false;
-const ledgerMode = "Browser ledger";
+const ledgerMode = "Pages snapshot";
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -145,7 +148,7 @@ const formatCurrency = (value) => currencyFormatter.format(value);
 
 const requireAvailableCash = () => {
   if (typeof availableCash !== "number") {
-    throw new Error("Adjusted cash has not loaded from financial-data.json yet");
+    throw new Error("Available cash has not loaded from financial-data.json yet");
   }
 
   return availableCash;
@@ -162,9 +165,13 @@ async function loadFinancialData() {
   }
 
   const financialData = await response.json();
+  const availableCash = Number(
+    financialData.availableCash ?? financialData.adjustedCash,
+  );
 
   return {
-    adjustedCash: Number(financialData.adjustedCash),
+    availableCash,
+    groceries: normalizeGroceries(financialData.groceries),
     obligations: normalizeObligations(financialData.obligations),
   };
 }
@@ -196,14 +203,15 @@ function normalizeObligations(nextObligations) {
 async function getFinancialDataFromLedger() {
   const data = await loadFinancialData();
 
-  const adjustedCash = Number(data.adjustedCash);
+  const availableCash = Number(data.availableCash);
 
-  if (!Number.isFinite(adjustedCash)) {
-    throw new Error("Adjusted Cash is not a valid number");
+  if (!Number.isFinite(availableCash)) {
+    throw new Error("Available cash is not a valid number");
   }
 
   return {
-    adjustedCash,
+    availableCash,
+    groceries: data.groceries,
     obligations: data.obligations,
   };
 }
@@ -225,6 +233,14 @@ function loadAdjustedCash(defaultValue) {
 
   const savedValue = Number(saved);
   return Number.isFinite(savedValue) ? savedValue : defaultValue;
+}
+
+function hasCurrentDataVersion() {
+  return localStorage.getItem(STORAGE_KEYS.dataVersion) === DATA_VERSION;
+}
+
+function saveDataVersion() {
+  localStorage.setItem(STORAGE_KEYS.dataVersion, DATA_VERSION);
 }
 
 function readJsonStorage(key) {
@@ -253,6 +269,7 @@ function persistDashboardState() {
   saveGroceries();
   saveObligations();
   saveAdjustedCash(calculateCashPosition().adjustedCash);
+  saveDataVersion();
 }
 
 async function syncAdjustedCashToLedger() {
@@ -382,11 +399,22 @@ function mergeObligations(defaultObligations, savedObligations) {
   return [...mergedDefaults, ...savedExtras];
 }
 
-function loadGroceries() {
-  return normalizeGroceries(readJsonStorage(STORAGE_KEYS.groceries));
+function loadGroceries(defaultGroceries) {
+  if (!hasCurrentDataVersion()) {
+    return defaultGroceries;
+  }
+
+  const savedGroceries = readJsonStorage(STORAGE_KEYS.groceries);
+  return savedGroceries === null
+    ? defaultGroceries
+    : normalizeGroceries(savedGroceries);
 }
 
 function loadObligations(defaultObligations) {
+  if (!hasCurrentDataVersion()) {
+    return defaultObligations;
+  }
+
   return mergeObligations(
     defaultObligations,
     readJsonStorage(STORAGE_KEYS.obligations),
@@ -1157,13 +1185,17 @@ async function initDashboard() {
   try {
     const financialData = await getFinancialDataFromLedger();
     obligations = loadObligations(financialData.obligations);
-    groceryTransactions = loadGroceries();
+    groceryTransactions = loadGroceries(financialData.groceries);
 
-    const storedAdjustedCash = loadAdjustedCash(financialData.adjustedCash);
-    availableCash =
-      storedAdjustedCash +
-      calculateMonthToDateGrocerySpending(groceryTransactions) +
-      calculateTotalPaidBills(obligations);
+    if (hasCurrentDataVersion()) {
+      const storedAdjustedCash = loadAdjustedCash(financialData.availableCash);
+      availableCash =
+        storedAdjustedCash +
+        calculateMonthToDateGrocerySpending(groceryTransactions) +
+        calculateTotalPaidBills(obligations);
+    } else {
+      availableCash = financialData.availableCash;
+    }
 
     renderDashboard();
     persistDashboardState();
