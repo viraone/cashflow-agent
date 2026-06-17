@@ -161,10 +161,12 @@ function getSupabaseConfig() {
     !url ||
     !anonKey ||
     url.includes("YOUR_SUPABASE_PROJECT_URL") ||
-    anonKey.includes("YOUR_SUPABASE_ANON_KEY")
+    anonKey.includes("YOUR_SUPABASE_ANON_KEY") ||
+    anonKey.includes("YOUR_SUPABASE_ANON_OR_PUBLISHABLE_KEY") ||
+    anonKey.startsWith("sb_secret_")
   ) {
     throw new Error(
-      "Supabase is not configured. Add your project URL and anon key in supabase-config.js.",
+      "Supabase is not configured. Add your public anon/publishable key in supabase-config.js.",
     );
   }
 
