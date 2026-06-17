@@ -509,11 +509,7 @@ const calculateCashPosition = () => {
 function CashPositionCard({
   availableCash: currentCash,
   trackedObligations,
-  knownAmounts,
-  unknownAmounts,
   paidCount,
-  totalPaidBills,
-  billsRemaining,
   groceriesSpent,
   adjustedCash,
 }) {
@@ -542,28 +538,8 @@ function CashPositionCard({
           </dd>
         </div>
         <div class="cash-row">
-          <dt>Tracked obligations</dt>
-          <dd class="cash-value">${trackedObligations}</dd>
-        </div>
-        <div class="cash-row">
-          <dt>Known amounts</dt>
-          <dd class="cash-value">${formatCurrency(knownAmounts)}</dd>
-        </div>
-        <div class="cash-row">
-          <dt>Unknown amounts</dt>
-          <dd class="cash-value">${unknownAmounts}</dd>
-        </div>
-        <div class="cash-row">
           <dt>Grocery spending</dt>
           <dd class="cash-value">${formatCurrency(groceriesSpent)}</dd>
-        </div>
-        <div class="cash-row">
-          <dt>Bills paid this month</dt>
-          <dd class="cash-value">${formatCurrency(totalPaidBills)}</dd>
-        </div>
-        <div class="cash-row">
-          <dt>Bills remaining</dt>
-          <dd class="cash-value">${formatCurrency(billsRemaining)}</dd>
         </div>
         <div class="cash-row adjusted-cash-summary">
           <dt>Adjusted cash</dt>
