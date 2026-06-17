@@ -30,7 +30,7 @@ if (appShell && sidebarToggle) {
   });
 }
 
-let availableCash = null;
+let startingCash = null;
 let obligations = [];
 let editingObligationId = null;
 let dashboardInitialized = false;
@@ -146,12 +146,12 @@ const obligationAmountLabelMap = {
 
 const formatCurrency = (value) => currencyFormatter.format(value);
 
-const requireAvailableCash = () => {
-  if (typeof availableCash !== "number") {
-    throw new Error("Available cash has not loaded from financial-data.json yet");
+const requireStartingCash = () => {
+  if (typeof startingCash !== "number") {
+    throw new Error("Starting cash has not loaded from financial-data.json yet");
   }
 
-  return availableCash;
+  return startingCash;
 };
 
 const formatAmountInput = (value) =>
@@ -165,12 +165,14 @@ async function loadFinancialData() {
   }
 
   const financialData = await response.json();
-  const availableCash = Number(
-    financialData.availableCash ?? financialData.adjustedCash,
+  const startingCash = Number(
+    financialData.startingCash ??
+      financialData.availableCash ??
+      financialData.adjustedCash,
   );
 
   return {
-    availableCash,
+    startingCash,
     groceries: normalizeGroceries(financialData.groceries),
     obligations: normalizeObligations(financialData.obligations),
   };
@@ -203,14 +205,14 @@ function normalizeObligations(nextObligations) {
 async function getFinancialDataFromLedger() {
   const data = await loadFinancialData();
 
-  const availableCash = Number(data.availableCash);
+  const startingCash = Number(data.startingCash);
 
-  if (!Number.isFinite(availableCash)) {
-    throw new Error("Available cash is not a valid number");
+  if (!Number.isFinite(startingCash)) {
+    throw new Error("Starting cash is not a valid number");
   }
 
   return {
-    availableCash,
+    startingCash,
     groceries: data.groceries,
     obligations: data.obligations,
   };
@@ -469,7 +471,7 @@ const calculateBillTotals = () => {
 };
 
 const calculateGrocerySpending = () => {
-  const currentCash = requireAvailableCash();
+  const currentStartingCash = requireStartingCash();
   const today = getTodayString();
   const todaysSpending = groceryTransactions.reduce(
     (total, transaction) =>
@@ -482,7 +484,7 @@ const calculateGrocerySpending = () => {
   return {
     todaysSpending,
     monthToDateSpending,
-    adjustedCash: currentCash - monthToDateSpending - totalPaidBills,
+    adjustedCash: currentStartingCash - monthToDateSpending - totalPaidBills,
   };
 };
 
@@ -490,12 +492,11 @@ const getObligationById = (id) =>
   obligations.find((obligation) => obligation.id === id);
 
 const calculateCashPosition = () => {
-  const currentCash = requireAvailableCash();
   const billTotals = calculateBillTotals();
   const { monthToDateSpending, adjustedCash } = calculateGrocerySpending();
 
   return {
-    availableCash: currentCash,
+    availableCash: adjustedCash,
     trackedObligations: obligations.length,
     groceriesSpent: monthToDateSpending,
     adjustedCash,
@@ -1188,13 +1189,13 @@ async function initDashboard() {
     groceryTransactions = loadGroceries(financialData.groceries);
 
     if (hasCurrentDataVersion()) {
-      const storedAdjustedCash = loadAdjustedCash(financialData.availableCash);
-      availableCash =
+      const storedAdjustedCash = loadAdjustedCash(financialData.startingCash);
+      startingCash =
         storedAdjustedCash +
         calculateMonthToDateGrocerySpending(groceryTransactions) +
         calculateTotalPaidBills(obligations);
     } else {
-      availableCash = financialData.availableCash;
+      startingCash = financialData.startingCash;
     }
 
     renderDashboard();
