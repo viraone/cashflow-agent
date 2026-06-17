@@ -1,5 +1,13 @@
 {
-  "adjustedCash": 5954.86,
+  "availableCash": 5954.86,
+  "groceries": [
+    {
+      "id": "qfc-2026-06-16",
+      "merchant": "QFC",
+      "amount": 43.0,
+      "date": "2026-06-16"
+    }
+  ],
   "obligations": [
     {
       "id": "pilot-apartments",
@@ -12,10 +20,11 @@
     {
       "id": "paypal-credit-card",
       "name": "PayPal Credit Card",
-      "category": "Credit Card",
+      "category": "Credit card",
       "amount": 1150.18,
       "dueDate": "2026-07-10",
-      "isPaid": false
+      "isPaid": false,
+      "amountLabel": "Balance owed"
     },
     {
       "id": "xfinity-internet",
@@ -44,7 +53,7 @@
     {
       "id": "becu-credit-card",
       "name": "BECU Credit Card",
-      "category": "Credit Card",
+      "category": "Credit card",
       "amount": 200.0,
       "dueDate": "2026-07-25",
       "isPaid": false
@@ -52,7 +61,7 @@
     {
       "id": "seattle-city-lights",
       "name": "Seattle City Light",
-      "category": "Electric Utility",
+      "category": "Electric utility",
       "amount": 90.0,
       "dueDate": "2026-07-18",
       "isPaid": false
