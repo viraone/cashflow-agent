@@ -396,6 +396,27 @@ const formatDueDate = (value) => {
   return `Due ${dueDateFormatter.format(date)}`;
 };
 
+function sortBillsByDueDate(bills) {
+  return [...bills].sort((a, b) => {
+    if (!a.dueDate && !b.dueDate) {
+      return 0;
+    }
+
+    if (!a.dueDate) {
+      return 1;
+    }
+
+    if (!b.dueDate) {
+      return -1;
+    }
+
+    return (
+      new Date(a.dueDate).getTime() -
+      new Date(b.dueDate).getTime()
+    );
+  });
+}
+
 const getTodayString = () => {
   const today = new Date();
   const year = today.getFullYear();
@@ -869,7 +890,8 @@ function renderObligations() {
     return;
   }
 
-  obligationsList.innerHTML = obligations.map(ObligationCard).join("");
+  const sortedObligations = sortBillsByDueDate(obligations);
+  obligationsList.innerHTML = sortedObligations.map(ObligationCard).join("");
 }
 
 function renderDashboard() {
