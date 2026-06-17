@@ -964,6 +964,7 @@ svg {
 }
 
 .bill-row {
+  position: relative;
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr) auto auto;
   gap: 13px;
@@ -981,17 +982,36 @@ svg {
 }
 
 .bill-row.paid-bill {
-  border-color: #9ed8b4;
-  background: #effaf4;
+  border-color: #57c785;
+  background:
+    linear-gradient(135deg, rgba(218, 248, 230, 0.96), rgba(247, 255, 250, 0.98) 68%),
+    #ecfbf2;
+  box-shadow:
+    0 18px 42px rgba(8, 116, 67, 0.12),
+    inset 0 0 0 1px rgba(8, 116, 67, 0.1);
+}
+
+.bill-row.paid-bill::before {
+  content: "";
+  position: absolute;
+  inset: 10px auto 10px 0;
+  width: 4px;
+  border-radius: 999px;
+  background: #09884d;
 }
 
 .paid-bill .bill-icon {
-  color: #087443;
-  background: #dff6ea;
+  color: #ffffff;
+  background: #09884d;
+  box-shadow: 0 10px 22px rgba(8, 116, 67, 0.2);
 }
 
 .paid-bill .bill-main h3 {
   color: #087443;
+}
+
+.paid-bill .bill-meta strong {
+  color: #064e3b;
 }
 
 .bill-row-editing {
@@ -1063,19 +1083,19 @@ svg {
 .paid-title {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
 }
 
 .paid-title-check {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
   border-radius: 999px;
   color: #ffffff;
   background: #09884d;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1;
   font-weight: 900;
 }
@@ -1120,8 +1140,17 @@ svg {
 }
 
 .paid-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: max-content;
+  margin-left: auto;
+  padding: 5px 9px;
+  border: 1px solid #b7e7c8;
+  border-radius: 999px;
   color: #087443;
-  font-weight: 820;
+  background: #dff6ea;
+  font-weight: 860;
 }
 
 .bill-actions {
@@ -1158,9 +1187,10 @@ svg {
 }
 
 .paid-confirm-button {
-  border: 1px solid #087443;
+  border: 1px solid #076b3e;
   color: #ffffff;
-  background: #09884d;
+  background: #087443;
+  box-shadow: 0 8px 16px rgba(8, 116, 67, 0.16);
   cursor: default;
 }
 
@@ -1169,15 +1199,16 @@ svg {
 }
 
 .undo-payment-button {
-  border: 1px solid #d9dee8;
-  color: #475467;
-  background: #ffffff;
+  border: 1px solid #b7e7c8;
+  color: #087443;
+  background: rgba(255, 255, 255, 0.88);
 }
 
 .undo-payment-button:hover,
 .undo-payment-button:focus-visible {
-  color: #111827;
-  background: #f5f7fb;
+  color: #064e3b;
+  background: #ffffff;
+  border-color: #57c785;
   outline: none;
 }
 
