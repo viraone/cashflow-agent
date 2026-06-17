@@ -29,15 +29,28 @@ let editingObligationId = null;
 let dashboardInitialized = false;
 let supabaseClient = null;
 const ledgerMode = "Supabase sync";
+const dailySpendingBudget = 200;
+const monthlyBudgetLimit = 3000;
+const monthlyBudgetBaselineSpend = 1204;
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
 });
 
+const wholeCurrencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
+
 const dueDateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
+});
+
+const budgetMonthFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "long",
 });
 
 /**
@@ -139,6 +152,7 @@ const obligationAmountLabelMap = {
 };
 
 const formatCurrency = (value) => currencyFormatter.format(value);
+const formatWholeCurrency = (value) => wholeCurrencyFormatter.format(value);
 
 const requireStartingCash = () => {
   if (typeof startingCash !== "number") {
@@ -603,19 +617,59 @@ function GroceryTransactionList() {
 function DailySpendingCard() {
   const { todaysSpending, monthToDateSpending, adjustedCash } =
     calculateGrocerySpending();
+  const dailyBudgetLeft = Math.max(dailySpendingBudget - todaysSpending, 0);
+  const monthlyBudgetSpent = monthlyBudgetBaselineSpend + monthToDateSpending;
+  const monthlyBudgetProgress =
+    monthlyBudgetLimit === 0
+      ? 0
+      : Math.min((monthlyBudgetSpent / monthlyBudgetLimit) * 100, 100);
+  const budgetMonth = budgetMonthFormatter.format(new Date());
 
   return `
     <article class="daily-spending-card" aria-label="Daily Spending">
       <div class="daily-card-top">
         <div>
           <h3>Daily Spending</h3>
-          <p>Variable spend plus paid bills updates real cash left.</p>
         </div>
         <button class="add-spending-button" type="button" data-action="open-grocery-modal">
           ${PlusIcon}
           <span>+ Add grocery purchase</span>
         </button>
       </div>
+
+      <section class="daily-insight-card" aria-label="Daily spending summary">
+        <dl class="daily-insight-grid">
+          <div>
+            <dt>Today's spending</dt>
+            <dd>${formatWholeCurrency(todaysSpending)}</dd>
+          </div>
+          <div>
+            <dt>Monthly spending</dt>
+            <dd>${formatWholeCurrency(monthToDateSpending)}</dd>
+          </div>
+          <div>
+            <dt>Remaining cash</dt>
+            <dd>${formatWholeCurrency(adjustedCash)}</dd>
+          </div>
+          <div>
+            <dt>Daily budget left</dt>
+            <dd>${formatWholeCurrency(dailyBudgetLeft)}</dd>
+          </div>
+        </dl>
+
+        <div class="budget-progress-card">
+          <div class="budget-progress-top">
+            <span>${escapeHtml(budgetMonth)} Budget</span>
+            <strong>${Math.round(monthlyBudgetProgress)}%</strong>
+          </div>
+          <div class="budget-progress-track" aria-hidden="true">
+            <span style="width: ${monthlyBudgetProgress}%"></span>
+          </div>
+          <p>${formatWholeCurrency(monthlyBudgetSpent)} spent of ${formatWholeCurrency(
+            monthlyBudgetLimit,
+          )}</p>
+        </div>
+      </section>
 
       <div class="spending-category">
         <span class="spending-icon" aria-hidden="true">
@@ -630,21 +684,6 @@ function DailySpendingCard() {
           <p>Food and household essentials</p>
         </div>
       </div>
-
-      <dl class="spending-summary">
-        <div>
-          <dt>Today's spending</dt>
-          <dd>${formatCurrency(todaysSpending)}</dd>
-        </div>
-        <div>
-          <dt>Month-to-date spending</dt>
-          <dd>${formatCurrency(monthToDateSpending)}</dd>
-        </div>
-        <div class="adjusted-cash-row">
-          <dt>Adjusted cash</dt>
-          <dd>${formatCurrency(adjustedCash)}</dd>
-        </div>
-      </dl>
 
       ${GroceryTransactionList()}
     </article>
