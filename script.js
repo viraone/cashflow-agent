@@ -152,7 +152,8 @@ const obligationAmountLabelMap = {
 };
 
 const formatCurrency = (value) => currencyFormatter.format(value);
-const formatWholeCurrency = (value) => wholeCurrencyFormatter.format(value);
+const formatWholeCurrency = (value) =>
+  wholeCurrencyFormatter.format(Math.trunc(value));
 
 const requireStartingCash = () => {
   if (typeof startingCash !== "number") {
